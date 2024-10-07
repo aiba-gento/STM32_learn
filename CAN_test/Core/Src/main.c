@@ -55,13 +55,52 @@ void SystemClock_Config(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-// 内部使用データ
+
+// CAN通信で使用するデータ
 FDCAN_RxHeaderTypeDef RxHeader;
 FDCAN_FilterTypeDef RxFilter;
 FDCAN_TxHeaderTypeDef TxHeader;
 uint32_t TxMailbox;
 uint8_t RxData[8];
+bool RxFlag;
 
+/**
+ * @brief CAN通信の初期設定をする
+ *
+ */
+void initCAN()
+{
+  // CANのフィルタ設定
+  RxFilter.IdType = FDCAN_STANDARD_ID;             // 標準ID
+  RxFilter.FilterIndex = 0;                        // フィルタインデックス
+  RxFilter.FilterType = FDCAN_FILTER_MASK;         // マスク
+  RxFilter.FilterConfig = FDCAN_FILTER_TO_RXFIFO0; // FIFO0にフィルタ
+  RxFilter.FilterID1 = 0x000;
+  RxFilter.FilterID2 = 0x000;
+  if (HAL_FDCAN_ConfigFilter(&hfdcan1, &RxFilter) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  if (HAL_FDCAN_Start(&hfdcan1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  // 割り込み有効
+  if (HAL_FDCAN_ActivateNotification(&hfdcan1, FDCAN_IT_RX_FIFO0_NEW_MESSAGE, 0) != HAL_OK)
+  {
+    Error_Handler();
+  }
+}
+
+/**
+ * @brief データを送信する関数
+ *
+ * @param can_id CANパケットのID
+ * @param tx_buffer 送信データ
+ * @param data_length データのサイズ[byte]
+ * @return true 送信成功
+ * @return false 送信失敗
+ */
 bool sendPacket(uint16_t can_id, uint8_t *tx_buffer, uint8_t data_length)
 {
 
@@ -125,26 +164,7 @@ int main(void)
   MX_GPIO_Init();
   MX_FDCAN1_Init();
   /* USER CODE BEGIN 2 */
-  // CANのフィルタ設定
-  RxFilter.IdType = FDCAN_STANDARD_ID;             // 標準ID
-  RxFilter.FilterIndex = 0;                        // フィルタインデックス
-  RxFilter.FilterType = FDCAN_FILTER_MASK;         // マスク
-  RxFilter.FilterConfig = FDCAN_FILTER_TO_RXFIFO0; // FIFO0にフィルタ
-  RxFilter.FilterID1 = 0x000;
-  RxFilter.FilterID2 = 0x000;
-  if (HAL_FDCAN_ConfigFilter(&hfdcan1, &RxFilter) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  if (HAL_FDCAN_Start(&hfdcan1) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  // 割り込み有効
-  if (HAL_FDCAN_ActivateNotification(&hfdcan1, FDCAN_IT_RX_FIFO0_NEW_MESSAGE, 0) != HAL_OK)
-  {
-    Error_Handler();
-  }
+  initCAN();
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -154,7 +174,13 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
+    char tx_data[] = 1;
+    sendPacket(0x00, tx_data, sizeof(tx_data)); // CANでデータを送信
+    if (RxFlag)
+    {
     }
+    HAL_Delay(1000);
+  }
   /* USER CODE END 3 */
 }
 
@@ -204,7 +230,7 @@ void SystemClock_Config(void)
 }
 
 /* USER CODE BEGIN 4 */
-void onReceiveTask(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs)
+void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs)
 {
   if (hfdcan->Instance == hfdcan1.Instance)
   {
@@ -213,6 +239,11 @@ void onReceiveTask(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs)
       if (HAL_FDCAN_GetRxMessage(hfdcan, FDCAN_RX_FIFO0, &RxHeader, RxData) != HAL_OK)
       {
         Error_Handler();
+      }
+      else
+      {
+        // 受信処理
+        RxFlag = true;
       }
     }
   }
