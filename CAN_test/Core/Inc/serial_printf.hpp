@@ -1,7 +1,6 @@
 #pragma once
 #include <string>
 #include <vector>
-#include <cstdio>
 #include "usart.h"
 
 // テンプレートの宣言と実装
